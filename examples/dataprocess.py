@@ -4,7 +4,7 @@ Created on Sat Sep 19 19:21:24 2020
 
 @author: a
 """
-import json
+import json,os
 import numpy as np
 from bert4keras.backend import keras, K
 from bert4keras.models import build_transformer_model
@@ -24,10 +24,11 @@ bert_layers = 12
 learing_rate = 1e-5  # bert_layers越小，学习率应该要越大
 crf_lr_multiplier = 1000  # 必要时扩大CRF层的学习率
 
+modeldata_path = r'C:\Users\tunan\model_data\bert4keras'
 # bert配置
-config_path = r'C:\Users\a\Desktop\bert4keras-master\examples\datasets\chinese_L-12_H-768_A-12\bert_config.json'
-checkpoint_path = r'C:\Users\a\Desktop\bert4keras-master\examples\datasets\chinese_L-12_H-768_A-12\bert_model.ckpt'
-dict_path = r'C:\Users\a\Desktop\bert4keras-master\examples\datasets\chinese_L-12_H-768_A-12\vocab.txt'
+config_path = os.path.join(modeldata_path,r'chinese_L-12_H-768_A-12\bert_config.json')
+checkpoint_path = os.path.join(modeldata_path,r'chinese_L-12_H-768_A-12\bert_model.ckpt')
+dict_path = os.path.join(modeldata_path,r'chinese_L-12_H-768_A-12\vocab.txt')
 
 
 #每行只能作为一个json文件打开。
@@ -95,7 +96,7 @@ with open(test_data_path,'r',encoding='gbk') as f:
 train_data = load_data(data)
 train_num = int(len(train_data)*0.8)
 
-dev_data = train_data[train_num:]
+valid_data = train_data[train_num:]
 train_data = train_data[:train_num]
 test_data = load_data(test_data)
 
@@ -143,10 +144,117 @@ class data_generator(DataGenerator):
                 batch_labels = sequence_padding(batch_labels)           #batch中的每个样本都padding到统一长度。
                 yield [batch_token_ids, batch_segment_ids], batch_labels #返回一个batch的样本。
                 batch_token_ids, batch_segment_ids, batch_labels = [], [], []
+                
+#加载模型
+model = build_transformer_model(
+    config_path,
+    checkpoint_path,
+)
+#模型最后一个transformer输出层的名称。
+output_layer = 'Transformer-%s-FeedForward-Norm' % (bert_layers - 1)
+output = model.get_layer(output_layer).output #得到bert最后一个transformer输出的向量，大小为768.
+output = Dense(num_labels)(output) #增加一个全连接到7维向量中。
+CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier) #输入到CRF层中，得到输出。
+output = CRF(output)
+
+model = Model(model.input, output) #根据输入输出生成模型。
+model.summary()
+
+#模型损失使用CRF.sparse_loss,adam学习器，CRF的离散准确率。
+model.compile(
+    loss=CRF.sparse_loss,
+    optimizer=Adam(learing_rate),
+    metrics=[CRF.sparse_accuracy]
+)
+
+
+class NamedEntityRecognizer(ViterbiDecoder):
+    """命名实体识别器
+    """
+    def recognize(self, text):                       #预测text的实体结果，text为一条样本
+        tokens = tokenizer.tokenize(text)            # 对其token化,转换成列表，且加入头部和尾部。输出的依然是字。
+        while len(tokens) > 512:                     #tokens截断到最大512.   
+            tokens.pop(-2)
+        mapping = tokenizer.rematch(text, tokens)       #重新匹配，句子和token序列。
+        token_ids = tokenizer.tokens_to_ids(tokens)     #转换成id序列。
+        segment_ids = [0] * len(token_ids)              #生成分区id。
+        token_ids, segment_ids = to_array([token_ids], [segment_ids])       
+        nodes = model.predict([token_ids, segment_ids])[0]      #预测该样本，得到的是crf的输出
+        labels = self.decode(nodes)                             #对输出值进行维特比解码。
+        entities, starting = [], False                      
+        for i, label in enumerate(labels):       #根据预测值，生成样本的实体和对应label的tuple对。
+            if label > 0:
+                if label % 2 == 1:
+                    starting = True
+                    entities.append([[i], id2label[(label - 1) // 2]])
+                elif starting:
+                    entities[-1][0].append(i)
+                else:
+                    starting = False
+            else:
+                starting = False
+
+        return [(text[mapping[w[0]][0]:mapping[w[-1]][-1] + 1], l)
+                for w, l in entities]
+
+
+NER = NamedEntityRecognizer(trans=K.eval(CRF.trans), starts=[0], ends=[0]) 
+
+
+def evaluate(data):  #评测函数data为验证集数据。数据形式为list
+    """评测函数
+    """
+    X, Y, Z = 1e-10, 1e-10, 1e-10
+    for d in tqdm(data): #得到每条数据
+        text = ''.join([i[0] for i in d]) #将文本部分拼接起来。
+        R = set(NER.recognize(text)) #
+        T = set([tuple(i) for i in d if i[1] != 'O'])  #得到实体和对应label tuple对(实体文本，label)。即使该实体出现多次，只要有一个预测准确就可以了。
+        X += len(R & T)                                  #计算所有预测准确的实体数。
+        Y += len(R)                                      #计算所有预测为实体的个数。
+        Z += len(T)                                      #计算真实实体个数。
+    f1, precision, recall = 2 * X / (Y + Z), X / Y, X / Z           #f1计算为预测准确实体比上预测实体和真实实体的平均数。与常规方法不一致。
+    return f1, precision, recall
+
+
+class Evaluator(keras.callbacks.Callback): #自定义回调函数类。
+    def __init__(self): #开始的时候令最优验证f1为0。
+        self.best_val_f1 = 0
+
+    def on_epoch_end(self, epoch, logs=None): #每个epoch结束时调用。
+        trans = K.eval(CRF.trans)
+        NER.trans = trans
+        # print(NER.trans) #打印了ner的转移
+        f1, precision, recall = evaluate(valid_data)        #输入验证集数据，计算f1,precision,recall值。
+        # 保存最优
+        if f1 >= self.best_val_f1:
+            self.best_val_f1 = f1
+            model.save_weights(os.path.join(modeldata_path,r'model/best_model.weights'))
+        print(
+            'valid:  f1: %.5f, precision: %.5f, recall: %.5f, best f1: %.5f\n' %
+            (f1, precision, recall, self.best_val_f1)
+        )
+        f1, precision, recall = evaluate(test_data)
+        print(
+            'test:  f1: %.5f, precision: %.5f, recall: %.5f\n' %
+            (f1, precision, recall)
+        )
+
 
 if __name__ == '__main__':
+
+    evaluator = Evaluator() 
     train_generator = data_generator(train_data, batch_size)
-    x = next(train_generator.forfit())
-    
+
+    model.fit_generator(
+        train_generator.forfit(),
+        steps_per_epoch=len(train_generator),
+        epochs=epochs,
+        callbacks=[evaluator]
+    )
+
+else:
+
+    model.load_weights(os.path.join(modeldata_path,r'model/best_model.weights'))
+
     
 
