@@ -4,6 +4,23 @@ Created on Sat Sep 19 19:21:24 2020
 
 @author: a
 """
+#输出记录重定向。
+import sys
+class Logger(object):
+    def __init__(self, filename='default.log', stream=sys.stdout):
+	    self.terminal = stream
+	    self.log = open(filename, 'a')
+
+    def write(self, message):
+	    self.terminal.write(message)
+	    self.log.write(message)
+
+    def flush(self):
+	    pass
+
+sys.stdout = Logger('./log.txt', sys.stdout)
+sys.stderr = Logger('./log.txt', sys.stderr)		# redirect std err, if necessary
+
 import json,os
 import numpy as np
 from bert4keras.backend import keras, K
@@ -18,7 +35,7 @@ from keras.models import Model
 from tqdm import tqdm
 
 maxlen = 256
-epochs = 10
+epochs = 30
 batch_size = 16
 bert_layers = 12
 learing_rate = 1e-5  # bert_layers越小，学习率应该要越大
@@ -245,7 +262,7 @@ if __name__ == '__main__':
     evaluator = Evaluator() 
     train_generator = data_generator(train_data, batch_size)
 
-    model.fit_generator(
+    histoty = model.fit_generator(
         train_generator.forfit(),
         steps_per_epoch=len(train_generator),
         epochs=epochs,
