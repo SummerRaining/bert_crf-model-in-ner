@@ -34,6 +34,9 @@ from keras.layers import Dense,TimeDistributed,Bidirectional,LSTM,Dropout
 from keras.models import Model
 from tqdm import tqdm
 from keras_lr_multiplier import LRMultiplier
+from keras.utils.np_utils import to_categorical
+
+
 
 maxlen = 512
 epochs = 10
@@ -161,6 +164,7 @@ class data_generator(DataGenerator):
                 batch_token_ids = sequence_padding(batch_token_ids)
                 batch_segment_ids = sequence_padding(batch_segment_ids)
                 batch_labels = sequence_padding(batch_labels)           #batch中的每个样本都padding到统一长度。
+                batch_labels = to_categorical(batch_labels, num_classes=num_labels)
                 yield [batch_token_ids, batch_segment_ids], batch_labels #返回一个batch的样本。
                 batch_token_ids, batch_segment_ids, batch_labels = [], [], []
                 
@@ -172,7 +176,7 @@ model = build_transformer_model(
 #模型最后一个transformer输出层的名称。
 output_layer = 'Transformer-%s-FeedForward-Norm' % (bert_layers - 1)
 output = model.get_layer(output_layer).output #得到bert最后一个transformer输出的向量，大小为768.
-output = Dense(num_labels, activation="softmax")
+output = Dense(num_labels, activation="softmax")(output)
 model = Model(model.input, output) #根据输入输出生成模型。
 model.summary()
 
@@ -184,7 +188,7 @@ model.compile(
 )
 
 
-class NamedEntityRecognizer(ViterbiDecoder):
+class NamedEntityRecognizer(object):
     """命名实体识别器
     """
     def recognize(self, text):                       #预测text的实体结果，text为一条样本
@@ -196,9 +200,9 @@ class NamedEntityRecognizer(ViterbiDecoder):
         segment_ids = [0] * len(token_ids)              #生成分区id。
         token_ids, segment_ids = to_array([token_ids], [segment_ids])       
         nodes = model.predict([token_ids, segment_ids])[0]      #预测该样本，得到的是crf的输出
-        labels = np.argmax(nodes)                           #对输出值进行维特比解码。
+        labels = np.argmax(nodes,-1)                           #对输出值进行维特比解码。
         entities, starting = [], False                      
-        for i, label in enumerate(labels):       #根据预测值，生成样本的实体和对应label的tuple对。
+        for i, label in enumerate(list(labels)):       #根据预测值，生成样本的实体和对应label的tuple对。
             if label > 0:
                 if label % 2 == 1:
                     starting = True
@@ -214,7 +218,7 @@ class NamedEntityRecognizer(ViterbiDecoder):
                 for w, l in entities]
 
 
-NER = NamedEntityRecognizer(starts=[0], ends=[0]) 
+NER = NamedEntityRecognizer() 
 def evaluate(data):  #评测函数data为验证集数据。数据形式为list
     """评测函数
     """
@@ -254,13 +258,22 @@ class Evaluator(keras.callbacks.Callback): #自定义回调函数类。
 if __name__ == '__main__':
     evaluator = Evaluator() 
     train_generator = data_generator(train_data, batch_size)
+    
+    from sgdr_implementation import LR_Cycle
+    sched = LR_Cycle(iterations = len(train_generator),cycle_mult = 2)
     histoty = model.fit_generator(
         train_generator.forfit(),
         steps_per_epoch=len(train_generator),
-        epochs=epochs,
+        epochs=10,
         callbacks=[evaluator]
     )
-    
+    #学习率退火，训练10个epoch
+    histoty = model.fit_generator(
+        train_generator.forfit(),
+        steps_per_epoch=len(train_generator),
+        epochs=10,
+        callbacks=[evaluator,sched]
+    )
 else:
 
     model.load_weights(os.path.join(modeldata_path,r'model/best_model.weights'))

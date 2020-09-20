@@ -67,7 +67,7 @@ model = Model(inputs=base_model.input, outputs=[out])
 # Extracting layers at which split is made
 split_layer_1 = [layer for layer in model.layers if layer.name == model_split_1][0]
 split_layer_2 = [layer for layer in model.layers if layer.name == model_split_2][0]
-
+ 
 # Implementing Differential Learning
 opt = Adam_dlr(split_1 = split_layer_1, split_2 = split_layer_2,
                lr = [1e-7, 1e-4, 1e-2])
