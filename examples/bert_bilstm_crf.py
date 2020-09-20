@@ -196,7 +196,7 @@ class NamedEntityRecognizer(ViterbiDecoder):
         segment_ids = [0] * len(token_ids)              #生成分区id。
         token_ids, segment_ids = to_array([token_ids], [segment_ids])       
         nodes = model.predict([token_ids, segment_ids])[0]      #预测该样本，得到的是crf的输出
-        labels = self.decode(nodes)                             #对输出值进行维特比解码。
+        labels = np.argmax(nodes)                           #对输出值进行维特比解码。
         entities, starting = [], False                      
         for i, label in enumerate(labels):       #根据预测值，生成样本的实体和对应label的tuple对。
             if label > 0:
@@ -214,9 +214,7 @@ class NamedEntityRecognizer(ViterbiDecoder):
                 for w, l in entities]
 
 
-NER = NamedEntityRecognizer(trans=K.eval(CRF.trans), starts=[0], ends=[0]) 
-
-
+NER = NamedEntityRecognizer(starts=[0], ends=[0]) 
 def evaluate(data):  #评测函数data为验证集数据。数据形式为list
     """评测函数
     """
@@ -229,7 +227,6 @@ def evaluate(data):  #评测函数data为验证集数据。数据形式为list
         Y += len(R)                                      #计算所有预测为实体的个数。
         Z += len(T)                                      #计算真实实体个数。
     f1, precision, recall = 2 * X / (Y + Z), X / Y, X / Z           #f1计算是正确的，等于recall和precision的几何平均。
-    # f1, precision, recall = 2 * X*Y/ (Y + Z), X / Y, X / Z           #修改f1计算方法
     return f1, precision, recall
 
 
@@ -238,14 +235,11 @@ class Evaluator(keras.callbacks.Callback): #自定义回调函数类。
         self.best_val_f1 = 0
 
     def on_epoch_end(self, epoch, logs=None): #每个epoch结束时调用。
-        trans = K.eval(CRF.trans)
-        NER.trans = trans
-        # print(NER.trans) #打印了ner的转移
         f1, precision, recall = evaluate(valid_data)        #输入验证集数据，计算f1,precision,recall值。
         # 保存最优
         if f1 >= self.best_val_f1:
             self.best_val_f1 = f1
-            model.save_weights(os.path.join(modeldata_path,r'model/best_model.weights'))
+            model.save_weights(os.path.join(modeldata_path,r'model/origin_model.weights'))
         print(
             'valid:  f1: %.5f, precision: %.5f, recall: %.5f, best f1: %.5f\n' %
             (f1, precision, recall, self.best_val_f1)
