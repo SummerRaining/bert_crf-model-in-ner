@@ -38,7 +38,7 @@ class Adam_dlr(optimizers.Optimizer):
         super(Adam_dlr, self).__init__(**kwargs)
         with K.name_scope(self.__class__.__name__):
             self.iterations = K.variable(0, dtype='int64', name='iterations')
-            self.learning_rate = K.variable(lr, name='lr')
+            self.lr = K.variable(lr, name='lr')
             self.beta_1 = K.variable(beta_1, name='beta_1')
             self.beta_2 = K.variable(beta_2, name='beta_2')
             self.decay = K.variable(decay, name='decay')
@@ -56,7 +56,7 @@ class Adam_dlr(optimizers.Optimizer):
         grads = self.get_gradients(loss, params)
         self.updates = [K.update_add(self.iterations, 1)]
 
-        lr = self.learning_rate
+        lr = self.lr
         if self.initial_decay > 0:
             lr = lr * (1. / (1. + self.decay * K.cast(self.iterations,
                                                       K.dtype(self.decay))))
@@ -104,10 +104,10 @@ class Adam_dlr(optimizers.Optimizer):
         return self.updates
 
     def get_config(self):
-        print('Optimizer LR: ', K.get_value(self.learning_rate))
+        print('Optimizer LR: ', K.get_value(self.lr))
 #         print()
         config = {
-                  'lr': (K.get_value(self.learning_rate)),
+                  'lr': (K.get_value(self.lr)),
                   'beta_1': float(K.get_value(self.beta_1)),
                   'beta_2': float(K.get_value(self.beta_2)),
                   'decay': float(K.get_value(self.decay)),
