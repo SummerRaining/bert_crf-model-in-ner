@@ -18,10 +18,10 @@ class Logger(object):
     def flush(self):
 	    pass
 
-sys.stdout = Logger('./log.txt', sys.stdout)
-sys.stderr = Logger('./log.txt', sys.stderr)		# redirect std err, if necessary
+sys.stdout = Logger('./log_new.txt', sys.stdout)
+sys.stderr = Logger('./log_new.txt', sys.stderr)		# redirect std err, if necessary
 
-import json,os
+import json,os,random
 import numpy as np
 from bert4keras.backend import keras, K
 from bert4keras.models import build_transformer_model
@@ -112,6 +112,7 @@ with open(test_data_path,'r',encoding='gbk') as f:
     test_data.extend(f.readlines())
     
 train_data = load_data(data)
+random.shuffle(train_data)
 train_num = int(len(train_data)*0.8)
 
 valid_data = train_data[train_num:]
@@ -122,7 +123,7 @@ test_data = load_data(test_data)
 tokenizer = Tokenizer(dict_path, do_lower_case=True)
 
 # 类别映射
-labels = ['疾病和诊断', '检查', '检验','手术','药物','解剖部位']
+labels = ['疾病和诊断', '检查', '检验','手术','药物','解剖部位'] 
 id2label = dict(enumerate(labels))
 label2id = {j: i for i, j in id2label.items()}
 num_labels = len(labels) * 2 + 1
@@ -175,26 +176,13 @@ output = Dense(num_labels,name = 'dense_output')(output) #增加一个全连接�
 CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier) #输入到CRF层中，得到输出。crf的学习倍率
 output = CRF(output)
 
-
-##############################################################################
-#自定义迭代器，效果很差。没有作用。实现不同层使用不同的学习率。
-bert_lr = [1e-5,2e-5,5e-5]
-bert_lr = [5e-6,1e-5,2e-5]
-names = [x.name for x in model.layers]
-layer_lr = {}
-layer_lr.update({n:bert_lr[0] for n in names[:24]})
-layer_lr.update({n:bert_lr[0] for n in names[24:80]})
-layer_lr.update({n:bert_lr[0] for n in names[80:]})
-adam = LRMultiplier('adam', layer_lr)
-
-#############################################################################
 model = Model(model.input, output) #根据输入输出生成模型。
 model.summary()
 
 #模型损失使用CRF.sparse_loss,adam学习器，CRF的离散准确率。
 model.compile(
     loss=CRF.sparse_loss,
-    optimizer=adam,
+    optimizer=Adam(learing_rate),
     metrics=[CRF.sparse_accuracy]
 )
 
@@ -243,7 +231,8 @@ def evaluate(data):  #评测函数data为验证集数据。数据形式为list
         X += len(R & T)                                  #计算所有预测准确的实体数。
         Y += len(R)                                      #计算所有预测为实体的个数。
         Z += len(T)                                      #计算真实实体个数。
-    f1, precision, recall = 2 * X / (Y + Z), X / Y, X / Z           #f1计算为预测准确实体比上预测实体和真实实体的平均数。与常规方法不一致。
+    f1, precision, recall = 2 * X / (Y + Z), X / Y, X / Z           #f1计算是正确的，等于recall和precision的几何平均。
+    # f1, precision, recall = 2 * X*Y/ (Y + Z), X / Y, X / Z           #修改f1计算方法
     return f1, precision, recall
 
 
@@ -274,12 +263,15 @@ class Evaluator(keras.callbacks.Callback): #自定义回调函数类。
 if __name__ == '__main__':
     evaluator = Evaluator() 
     train_generator = data_generator(train_data, batch_size)
+    # 修改Implementing SGDR
+    from sgdr_implementation import LR_Cycle
+    sched = LR_Cycle(iterations = len(train_generator),cycle_mult = 2)
 
     histoty = model.fit_generator(
         train_generator.forfit(),
         steps_per_epoch=len(train_generator),
         epochs=epochs,
-        callbacks=[evaluator]
+        callbacks=[evaluator,sched]
     )
     
 else:
