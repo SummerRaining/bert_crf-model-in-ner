@@ -249,7 +249,7 @@ class NamedEntityRecognizer(object):
             else:
                 starting = False
 
-        return [(text[mapping[w[0]][0]:mapping[w[-1]][-1] + 1], l,w[0],w[-1])
+        return [(text[mapping[w[0]][0]:mapping[w[-1]][-1] + 1], l,mapping[w[0]][0],mapping[w[-1]][-1] + 1)
                 for w, l in entities]
 
 
@@ -297,7 +297,7 @@ def predict_test():
         
         content = []                
         for i,line in enumerate(R):
-            c = 'T{}\t{} {} {}\t{}'.format(i,line[1],line[2],line[3],line[0])
+            c = 'T{}\t{} {} {}\t{}'.format(i+1,line[1],line[2],line[3],line[0])
             content.append(c)
         
         p = os.path.join(test_path,'{}.ann'.format(index))      #目标文件的名称。
@@ -306,27 +306,30 @@ def predict_test():
 
 
 if __name__ == '__main__':
-    evaluator = Evaluator() 
-    train_generator = data_generator(train_data, batch_size)
-    
-    from sgdr_implementation import LR_Cycle
-    sched = LR_Cycle(iterations = len(train_generator),cycle_mult = 2)
-    histoty = model.fit_generator(
-        train_generator.forfit(), 
-        steps_per_epoch=len(train_generator),
-        epochs=10,
-        callbacks=[evaluator]
-    )
-    #学习率退火，训练10个epoch
-    histoty = model.fit_generator(
-        train_generator.forfit(),
-        steps_per_epoch=len(train_generator),
-        epochs=10,
-        callbacks=[evaluator,sched]
-    )
-    
-    predict_test()          #生成提交结果
-else:
+# =============================================================================
+#     evaluator = Evaluator() 
+#     train_generator = data_generator(train_data, batch_size)
+#     
+#     from sgdr_implementation import LR_Cycle
+#     sched = LR_Cycle(iterations = len(train_generator),cycle_mult = 2)
+#     histoty = model.fit_generator(
+#         train_generator.forfit(), 
+#         steps_per_epoch=len(train_generator),
+#         epochs=10,
+#         callbacks=[evaluator]
+#     )
+#     #学习率退火，训练10个epoch
+#     histoty = model.fit_generator(
+#         train_generator.forfit(),
+#         steps_per_epoch=len(train_generator),
+#         epochs=10,
+#         callbacks=[evaluator,sched]
+#     )
+#     
+#     # predict_test()          #生成提交结果
+# else:
+# =============================================================================
 
     model.load_weights(os.path.join(modeldata_path,r'tianchi_model/best_model.weights'))
+    predict_test()          #生成提交结果
 

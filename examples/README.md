@@ -18,9 +18,14 @@ bert-crf:
 
 我的结果：
 
-T0	DRUG 103 107	红虎灌肠液
-T1	DRUG_EFFICACY 121 124	清热解毒
-T2	DRUG_EFFICACY 126 129	化湿除带
+T1	DRUG_EFFICACY 138 142	清热解毒
+T2	DRUG_EFFICACY 143 147	化湿除带
+T3	DRUG_EFFICACY 148 152	祛瘀止痛
+T4	DRUG_EFFICACY 153 157	散结消癥
+T5	SYMPTOM 167 171	小腹疼痛
+T6	SYMPTOM 172 176	腰骶酸痛
+T7	SYMPTOM 177 181	带下量多
+T8	SYMPTOM 184 186	发热
 
 论坛上的结果：
 
@@ -42,3 +47,5 @@ T10 184 186 SYMPTOM 发热
 1、查看原代码中的逻辑。
 
 2、用正则匹配，找到出现的位置。
+
+3、验收标准：和论坛上的结果一致
