@@ -72,26 +72,28 @@ num_labels = len(labels) * 2 + 1
 #继承了自定义的DataGenerator
 class data_generator(DataGenerator):
     """数据生成器
+    使用训练数据和batch_size做为初始化输入变量。
     """
     def __iter__(self, random=False):
         batch_token_ids, batch_segment_ids, batch_labels = [], [], []
         for is_end, item in self.sample(random):
             #顺序去每条样本item，is_end为标记表示是否为最后一条记录。
             token_ids, labels = [tokenizer._token_start_id], [0] #cls的id和0
-            for w, l in item:  #一条样本中的，每个word和label。
-                w_token_ids = tokenizer.encode(w)[0][1:-1]  #对每段单词编码，得到所有字的id。
-                if len(token_ids) + len(w_token_ids) < maxlen: #如果已有的字小于最大长度，就加上当前id。
+            for w, l in item:                                   #一条样本中的，每个word和label。
+                w_token_ids = tokenizer.encode(w)[0][1:-1]      #对每段单词编码，得到所有字的id。
+                if len(token_ids) + len(w_token_ids) < maxlen:  #如果已有的字小于最大长度，就加上当前id。
                     token_ids += w_token_ids
-                    if l == 'O': #如果label为O，labels就直接增加对应长度的0。
+                    if l == 'O':                                #如果label为O，labels就直接增加对应长度的0。
                         labels += [0] * len(w_token_ids)
                     else:
-                        B = label2id[l] * 2 + 1 #否则就对应到它的开头和中间部分，
+                        B = label2id[l] * 2 + 1                 #否则就对应到它的开头和中间部分，
                         I = label2id[l] * 2 + 2
                         labels += ([B] + [I] * (len(w_token_ids) - 1))
                 else:
-                    break
+                    break                   
             #得到每个样本的字id和label id，长度等于句子长度。
             #如果有一个实体正好在最大长度处卡断了，就去除整个实体。
+            
             token_ids += [tokenizer._token_end_id]
             labels += [0] #输入和输出都加上结束符。label的开始符和结束符都为0。
             segment_ids = [0] * len(token_ids) #分区id都为0.
@@ -174,12 +176,12 @@ class NamedEntityRecognizer(ViterbiDecoder):
 NER = NamedEntityRecognizer(trans=K.eval(CRF.trans), starts=[0], ends=[0]) 
 
 
-def evaluate(data):  #评测函数data为验证集数据。数据形式为list
+def evaluate(data):                                         #评测函数data为验证集数据。数据形式为list
     """评测函数
     """
     X, Y, Z = 1e-10, 1e-10, 1e-10
     for d in tqdm(data): #得到每条数据
-        text = ''.join([i[0] for i in d]) #将文本部分拼接起来。
+        text = ''.join([i[0] for i in d])                   #将文本部分拼接起来。
         R = set(NER.recognize(text)) #
         T = set([tuple(i) for i in d if i[1] != 'O'])  #得到实体和对应label tuple对(实体文本，label)。即使该实体出现多次，只要有一个预测准确就可以了。
         X += len(R & T)                                  #计算所有预测准确的实体数。
