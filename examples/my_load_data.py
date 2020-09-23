@@ -121,24 +121,7 @@ def load_train_data():
         train_data.append({'originalText':sentence,'entities':wordLabel})      #该样本放入训练集中。
     return train_data
 
-#加载训练集数据
-d = load_train_data()
-train_data = load_data(d)
 
-random.shuffle(train_data)      #划分数据集
-train_num = int(len(train_data)*0.8)
-valid_data = train_data[train_num:]
-train_data = train_data[:train_num]
-
-# 建立分词器,do_lower_case:只包含小写字母，大写字母作为unk token处理。
-tokenizer = Tokenizer(dict_path, do_lower_case=True)
-
-# 类别映射
-labels = ['DRUG', 'DRUG_INGREDIENT', 'DISEASE','SYMPTOM','SYNDROME','DISEASE_GROUP',
-          'FOOD','FOOD_GROUP','PERSON_GROUP','DRUG_GROUP','DRUG_DOSAGE','DRUG_TASTE','DRUG_EFFICACY'] 
-id2label = dict(enumerate(labels))
-label2id = {j: i for i, j in id2label.items()}
-num_labels = len(labels) * 2 + 1
 
 #继承了自定义的DataGenerator
 class data_generator(DataGenerator):
@@ -176,6 +159,25 @@ class data_generator(DataGenerator):
                 batch_labels = to_categorical(batch_labels, num_classes=num_labels)
                 yield [batch_token_ids, batch_segment_ids], batch_labels #返回一个batch的样本。
                 batch_token_ids, batch_segment_ids, batch_labels = [], [], []
+                
+#加载训练集数据
+d = load_train_data()
+train_data = load_data(d)
+
+random.shuffle(train_data)      #划分数据集
+train_num = int(len(train_data)*0.8)
+valid_data = train_data[train_num:]
+train_data = train_data[:train_num]
+
+# 建立分词器,do_lower_case:只包含小写字母，大写字母作为unk token处理。
+tokenizer = Tokenizer(dict_path, do_lower_case=True)
+
+# 类别映射
+labels = ['DRUG', 'DRUG_INGREDIENT', 'DISEASE','SYMPTOM','SYNDROME','DISEASE_GROUP',
+          'FOOD','FOOD_GROUP','PERSON_GROUP','DRUG_GROUP','DRUG_DOSAGE','DRUG_TASTE','DRUG_EFFICACY'] 
+id2label = dict(enumerate(labels))
+label2id = {j: i for i, j in id2label.items()}
+num_labels = len(labels) * 2 + 1
                 
 #加载模型
 model = build_transformer_model(
@@ -306,30 +308,28 @@ def predict_test():
 
 
 if __name__ == '__main__':
-# =============================================================================
-#     evaluator = Evaluator() 
-#     train_generator = data_generator(train_data, batch_size)
-#     
-#     from sgdr_implementation import LR_Cycle
-#     sched = LR_Cycle(iterations = len(train_generator),cycle_mult = 2)
-#     histoty = model.fit_generator(
-#         train_generator.forfit(), 
-#         steps_per_epoch=len(train_generator),
-#         epochs=10,
-#         callbacks=[evaluator]
-#     )
-#     #学习率退火，训练10个epoch
-#     histoty = model.fit_generator(
-#         train_generator.forfit(),
-#         steps_per_epoch=len(train_generator),
-#         epochs=10,
-#         callbacks=[evaluator,sched]
-#     )
-#     
-#     # predict_test()          #生成提交结果
-# else:
-# =============================================================================
+    evaluator = Evaluator() 
+    train_generator = data_generator(train_data, batch_size)
+    
+    from sgdr_implementation import LR_Cycle
+    sched = LR_Cycle(iterations = len(train_generator),cycle_mult = 2)
+    histoty = model.fit_generator(
+        train_generator.forfit(), 
+        steps_per_epoch=len(train_generator),
+        epochs=10,
+        callbacks=[evaluator]
+    )
+    #学习率退火，训练10个epoch
+    histoty = model.fit_generator(
+        train_generator.forfit(),
+        steps_per_epoch=len(train_generator),
+        epochs=10,
+        callbacks=[evaluator,sched]
+    )
+    
+    # predict_test()          #生成提交结果
+else:
 
     model.load_weights(os.path.join(modeldata_path,r'tianchi_model/best_model.weights'))
-    predict_test()          #生成提交结果
+    # predict_test()          #生成提交结果
 
