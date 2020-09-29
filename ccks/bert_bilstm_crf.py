@@ -25,9 +25,10 @@ from keras.models import Model
 from tqdm import tqdm
 from keras_lr_multiplier import LRMultiplier
 from keras.utils.np_utils import to_categorical
+from sklearn.model_selection import KFold
 from util import Logger,logfile
 
-logfile('./log.txt')  #log文件
+logfile('./log.txt')            #log文件
 maxlen = 512
 epochs = 10
 batch_size = 8
@@ -42,15 +43,6 @@ checkpoint_path = os.path.join(modeldata_path,r'chinese_L-12_H-768_A-12\bert_mod
 dict_path = os.path.join(modeldata_path,r'chinese_L-12_H-768_A-12\vocab.txt')
 
 
-#每行只能作为一个json文件打开。
-data = []
-data1_path =  r'.\datasets\yidu-s4k\subtask1_training_part1.txt'
-data2_path =  r'.\datasets\yidu-s4k\subtask1_training_part1.txt'
-test_data_path = r'.\datasets\yidu-s4k\subtask1_test_set_with_answer.json'
-with open(data1_path,'r',encoding='gbk') as f:
-    data.extend(f.readlines())
-with open(data2_path,'r',encoding='gbk') as f:
-    data.extend(f.readlines())
 
 
 #对于不是实体的部分用O填充，补充进去。
@@ -99,27 +91,8 @@ def load_data(data):
         D.append(d)
     return D
 
-#加载测试集数据
-test_data = []
-with open(test_data_path,'r',encoding='gbk') as f:
-    test_data.extend(f.readlines())
-    
-train_data = load_data(data)
-random.shuffle(train_data)
-train_num = int(len(train_data)*0.8)
 
-valid_data = train_data[train_num:]
-train_data = train_data[:train_num]
-test_data = load_data(test_data)
 
-# 建立分词器,do_lower_case:只包含小写字母，大写字母作为unk token处理。
-tokenizer = Tokenizer(dict_path, do_lower_case=True)
-
-# 类别映射
-labels = ['疾病和诊断', '检查', '检验','手术','药物','解剖部位'] 
-id2label = dict(enumerate(labels))
-label2id = {j: i for i, j in id2label.items()}
-num_labels = len(labels) * 2 + 1
 
 #继承了自定义的DataGenerator
 class data_generator(DataGenerator):
@@ -158,32 +131,14 @@ class data_generator(DataGenerator):
                 yield [batch_token_ids, batch_segment_ids], batch_labels #返回一个batch的样本。
                 batch_token_ids, batch_segment_ids, batch_labels = [], [], []
                 
-#加载模型
-model = build_transformer_model(
-    config_path,
-    checkpoint_path,
-)
-#模型最后一个transformer输出层的名称。
-output_layer = 'Transformer-%s-FeedForward-Norm' % (bert_layers - 1)
-output = model.get_layer(output_layer).output #得到bert最后一个transformer输出的向量，大小为768.
-output = Dense(num_labels, activation="softmax")(output)
-model = Model(model.input, output) #根据输入输出生成模型。
-model.summary()
-
-#模型损失使用CRF.sparse_loss,adam学习器，CRF的离散准确率。
-model.compile(
-    loss='categorical_crossentropy',
-    optimizer=Adam(learing_rate),
-    metrics=['accuracy']
-)
 
 
 class NamedEntityRecognizer(object):
     """命名实体识别器
     """
     def recognize(self, text):                       #预测text的实体结果，text为一条样本
-        tokens = tokenizer.tokenize(text)            # 对其token化,转换成列表，且加入头部和尾部。输出的依然是字。
-        while len(tokens) > 512:                     #tokens截断到最大512.   
+        tokens = tokenizer.tokenize(text)                  # 对其token化,转换成列表，且加入头部和尾部。输出的依然是字。
+        while len(tokens) > 512:                           #tokens截断到最大512.   
             tokens.pop(-2)
         mapping = tokenizer.rematch(text, tokens)       #重新匹配，句子和token序列。
         token_ids = tokenizer.tokens_to_ids(tokens)     #转换成id序列。
@@ -208,19 +163,19 @@ class NamedEntityRecognizer(object):
                 for w, l in entities]
 
 
-NER = NamedEntityRecognizer() 
+NER = NamedEntityRecognizer()      #ner预测器
 def evaluate(data):  #评测函数data为验证集数据。数据形式为list
     """评测函数
     """
     X, Y, Z = 1e-10, 1e-10, 1e-10
     for d in tqdm(data): #得到每条数据
         text = ''.join([i[0] for i in d]) #将文本部分拼接起来。
-        R = set(NER.recognize(text)) #
+        R = set(NER.recognize(text))              #输入文本和模型，返回预测的实体
         T = set([tuple(i) for i in d if i[1] != 'O'])  #得到实体和对应label tuple对(实体文本，label)。即使该实体出现多次，只要有一个预测准确就可以了。
         X += len(R & T)                                  #计算所有预测准确的实体数。
         Y += len(R)                                      #计算所有预测为实体的个数。
         Z += len(T)                                      #计算真实实体个数。
-    f1, precision, recall = 2 * X / (Y + Z), X / Y, X / Z           #f1计算是正确的，等于recall和precision的几何平均。
+    f1, precision, recall = 2 * X / (Y + Z), X / Y, X / Z           #f1计算是正确 的，等于recall和precision的几何平均。
     return f1, precision, recall
 
 
@@ -238,35 +193,96 @@ class Evaluator(keras.callbacks.Callback): #自定义回调函数类。
             'valid:  f1: %.5f, precision: %.5f, recall: %.5f, best f1: %.5f\n' %
             (f1, precision, recall, self.best_val_f1)
         )
-        f1, precision, recall = evaluate(test_data)
+        f1, precision, recall = evaluate(test_data)    #训练阶段不应该使用测试集的数据
         print(
             'test:  f1: %.5f, precision: %.5f, recall: %.5f\n' %
             (f1, precision, recall)
         )
+        
+def build_model():
+    global model
+    #加载模型
+    model = build_transformer_model(
+        config_path,
+        checkpoint_path,
+    )
+    #模型最后一个transformer输出层的名称。
+    output_layer = 'Transformer-%s-FeedForward-Norm' % (bert_layers - 1)
+    output = model.get_layer(output_layer).output #得到bert最后一个transformer输出的向量，大小为768.
+    output = Dense(num_labels, activation="softmax")(output)
+    model = Model(model.input, output) #根据输入输出生成模型。
+    # model.summary()
+    
+    #模型损失使用CRF.sparse_loss,adam学习器，CRF的离散准确率。
+    model.compile(
+        loss='categorical_crossentropy',
+        optimizer=Adam(learing_rate),
+        metrics=['accuracy']
+    )
 
-
-if __name__ == '__main__':
+def train_single_model():
+    from keras import backend as K
+    K.clear_session()  #训练开始前清除显存
+    global model
+    build_model()    #定义模型结构
+    #定义评价器，训练模型
     evaluator = Evaluator() 
     train_generator = data_generator(train_data, batch_size)
     
     from sgdr_implementation import LR_Cycle
     sched = LR_Cycle(iterations = len(train_generator),cycle_mult = 2)
-    histoty = model.fit_generator(
+    model.fit_generator(
         train_generator.forfit(),
         steps_per_epoch=len(train_generator),
-        epochs=10,
+        epochs=epochs,
         callbacks=[evaluator]
     )
     #学习率退火，训练10个epoch
-    histoty = model.fit_generator(
+    model.fit_generator(
         train_generator.forfit(),
         steps_per_epoch=len(train_generator),
-        epochs=10,
+        epochs=epochs,
         callbacks=[evaluator,sched]
     )
-else:
-
-    model.load_weights(os.path.join(modeldata_path,r'model/best_model.weights'))
-
+    model.load_weights(os.path.join(modeldata_path,r'model/origin_model.weights'))   #加载模型预测，返回预测值。
+    f1, precision, recall = evaluate(test_data)
+    return f1,precision, recall
     
+def model_train():
+    global valid_data,test_data,train_data,id2label,tokenizer,label2id,num_labels
+    
+    data = []           #读取数据集
+    data1_path =  r'.\datasets\yidu-s4k\subtask1_training_part1.txt'
+    data2_path =  r'.\datasets\yidu-s4k\subtask1_training_part1.txt'
+    test_data_path = r'.\datasets\yidu-s4k\subtask1_test_set_with_answer.json'
+    with open(data1_path,'r',encoding='gbk') as f:
+        data.extend(f.readlines())
+    with open(data2_path,'r',encoding='gbk') as f:
+        data.extend(f.readlines())
+    test_data = []
+    with open(test_data_path,'r',encoding='gbk') as f:
+        test_data.extend(f.readlines())
+        
+    # 建立分词器,do_lower_case:只包含小写字母，大写字母作为unk token处理。
+    tokenizer = Tokenizer(dict_path, do_lower_case=True)
+    # 类别映射
+    labels = ['疾病和诊断', '检查', '检验','手术','药物','解剖部位'] 
+    id2label = dict(enumerate(labels))
+    label2id = {j: i for i, j in id2label.items()}
+    num_labels = len(labels) * 2 + 1
+    
+    X = load_data(data)     #分割数据集
+    test_data = load_data(test_data)
+    kf = KFold(n_splits=5,shuffle = True)
+    all_f1 = []
+    for train_index, val_index in kf.split(X):
+        train_data = list(np.array(X)[train_index])
+        valid_data = list(np.array(X)[val_index])    
+        f1,_,_ = train_single_model()   #训练模型
+        all_f1.append(f1)
+    return all_f1
 
+if __name__ == '__main__':   #if不改变变量的作用域
+    epochs = 10
+    f1 = model_train()
+    print(np.array(f1).mean(),np.array(f1).std())
