@@ -41,6 +41,34 @@ class NamedEntityRecognizer(object):
 
         return [(text[mapping[w[0]][0]:mapping[w[-1]][-1] + 1], l)
                 for w, l in entities]
+    def recognize1(self, text,model):
+        '''输入一条样本，返回实体和标签的列表。
+        '''                   
+        tokenizer,id2label = get_value('tokenizer'),get_value('id2label')
+        tokens = tokenizer.tokenize(text)                  # 对其token化,转换成列表，且加入头部和尾部。输出的依然是字。
+        while len(tokens) > 512:                           #tokens截断到最大512.   
+            tokens.pop(-2)
+        mapping = tokenizer.rematch(text, tokens)       #重新匹配，句子和token序列。
+        token_ids = tokenizer.tokens_to_ids(tokens)     #转换成id序列。
+        segment_ids = [0] * len(token_ids)              #生成分区id。
+        token_ids, segment_ids = to_array([token_ids], [segment_ids])       
+        nodes = model.predict([token_ids, segment_ids])[0]      #预测该样本，得到的是crf的输出
+        labels = np.argmax(nodes,-1)                           #对输出值进行维特比解码。
+        entities, starting = [], False                      
+        for i, label in enumerate(list(labels)):       #根据预测值，生成样本的实体和对应label的tuple对。
+            if label > 0:
+                if label % 2 == 1:
+                    starting = True
+                    entities.append([[i], id2label[(label - 1) // 2]])
+                elif starting:
+                    entities[-1][0].append(i)
+                else:
+                    starting = False
+            else:
+                starting = False
+
+        return [(text[mapping[w[0]][0]:mapping[w[-1]][-1] + 1], l,mapping[w[0]][0],mapping[w[-1]][-1]+1)
+                for w, l in entities]
 
 
 NER = NamedEntityRecognizer()      #ner预测器

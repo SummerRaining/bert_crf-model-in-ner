@@ -37,7 +37,7 @@ def train_single_model():
     epochs,batch_size,modeldata_path = get_value('epochs'),get_value('batch_size'),get_value('modeldata_path')
     test_data = get_value('test_data')
     train_data = get_value('train_data')
-    global model   #model只能作为单个模型的全局变量
+    global model
     model = build_model()    #定义模型结构
     evaluator = Evaluator() 
     train_generator = data_generator(train_data, batch_size)
@@ -101,6 +101,16 @@ def hyperparameter_tune(model_name,path):
     line = "{} model,{:.6f},{:.6f},{:.6f}\n".format(model_name,f1.mean(),f1.min(),f1.max())
     print(line)
     open("result_log.txt",'a').write(line)
+    
+def hyperparameter_tune_lr(lr):
+    set_value('learning_rate', lr)
+    f1 = model_train()
+    f1 = np.array(f1)
+    line = "{} learning rate ,{:.6f},{:.6f},{:.6f}\n".format(lr,f1.mean(),f1.min(),f1.max())
+    print(line)
+    open("result_log.txt",'a').write(line)
+    
+    
 
 if __name__ == '__main__':   #if不改变变量的作用域
     # 建立分词器,do_lower_case:只包含小写字母，大写字母作为unk token处理。
@@ -116,15 +126,20 @@ if __name__ == '__main__':   #if不改变变量的作用域
     set_value('num_labels',num_labels)
     set_value('tokenizer',tokenizer)
     set_value('epochs',10)
-    
-    model_path = {'base_bert':'chinese_L-12_H-768_A-12'
-     ,'roberta_wwm':'chinese_roberta_wwm_ext_L-12_H-768_A-12'
-     ,'bert_wwm':'chinese_roberta_wwm_ext_L-12_H-768_A-12'
-     ,'roberta':'brightmart_roberta_zh_l12'
-     ,'electra':'chinese_electra_base_L-12_H-768_A-12'}
-    for model_name in model_path:
-        path = model_path[model_name]
-        hyperparameter_tune(model_name,path)
-        
-    for model_name in model_path:
-        print(model_name)
+# =============================================================================
+#     for lr in [3e-5,3e-6,9e-5,2e-4]:
+#         hyperparameter_tune_lr(lr)
+# =============================================================================
+    for lr in [9e-5,2e-4]: 
+        hyperparameter_tune_lr(lr)
+# =============================================================================
+#     model_path = {'base_bert':'chinese_L-12_H-768_A-12'
+#      ,'roberta_wwm':'chinese_roberta_wwm_ext_L-12_H-768_A-12'
+#      ,'bert_wwm':'chinese_roberta_wwm_ext_L-12_H-768_A-12'
+#      ,'roberta':'brightmart_roberta_zh_l12'
+#      ,'electra':'chinese_electra_base_L-12_H-768_A-12'}
+#     for model_name in model_path:
+#         path = model_path[model_name]
+#         hyperparameter_tune(model_name,path) 
+# 
+# =============================================================================
