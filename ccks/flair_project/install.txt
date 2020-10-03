@@ -1,0 +1,6 @@
+conda create -n pytorch python=3.6
+
+conda install pytorch==1.2.0 torchvision==0.4.0 cudatoolkit=10.0 -c pytorch
+
+pip install flair
+
