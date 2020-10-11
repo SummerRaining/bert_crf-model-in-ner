@@ -9,6 +9,7 @@ from tqdm import tqdm
 from bert4keras.snippets import sequence_padding, DataGenerator
 from keras.utils.np_utils import to_categorical
 from util import _init,set_value,get_value
+from bert4keras.tokenizers import Tokenizer
 
 def add_O(wordlabel,length):    
     '''输入:wordlabel(list(dict)),length(int),输入原句的长度和一条样本数据。

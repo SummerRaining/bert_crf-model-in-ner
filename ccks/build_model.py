@@ -36,3 +36,5 @@ def build_model():
         metrics=['accuracy']
     )
     return model
+
+#分割训练集和测试集。

@@ -11,7 +11,7 @@ from flair.datasets import UD_ENGLISH
 from flair.embeddings import TokenEmbeddings, WordEmbeddings, StackedEmbeddings
 
 # 1. get the corpus
-corpus: Corpus = UD_ENGLISH().downsample(0.1)
+corpus: Corpus = UD_ENGLISH()
 print(corpus)
 
 # 2. what tag do we want to predict?
@@ -47,11 +47,9 @@ tagger: SequenceTagger = SequenceTagger(hidden_size=256,
 
 # 6. initialize trainer
 from flair.trainers import ModelTrainer
-
 trainer: ModelTrainer = ModelTrainer(tagger, corpus)
-
 # 7. start training
 trainer.train('resources/taggers/example-pos',
               learning_rate=0.1,
-              mini_batch_size=32,
+              mini_batch_size=128,
               max_epochs=150)

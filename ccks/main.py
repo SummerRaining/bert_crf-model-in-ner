@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed Sep 30 19:30:26 2020
-
 @author: tunan
 """
 import warnings
@@ -46,7 +45,7 @@ def train_single_model():
     model.fit_generator(
         train_generator.forfit(),
         steps_per_epoch=len(train_generator),
-        epochs=epochs,
+        epochs=5,
         callbacks=[evaluator]
     )
     #学习率退火，训练10个epoch
@@ -125,14 +124,26 @@ if __name__ == '__main__':   #if不改变变量的作用域
     set_value('label2id',label2id)
     set_value('num_labels',num_labels)
     set_value('tokenizer',tokenizer)
-    set_value('epochs',10)
+    set_value('learning_rate', 9e-05)  #设置为最优的学习率
+    modeldata_path = get_value('modeldata_path')  #设置最优的预训练模型
+    path = 'chinese_roberta_wwm_ext_L-12_H-768_A-12'
+    set_value('config_path',os.path.join(modeldata_path,r'{}\bert_config.json'.format(path)))
+    set_value('checkpoint_path',os.path.join(modeldata_path,r'{}\bert_model.ckpt'.format(path)))
+    set_value('dict_path',os.path.join(modeldata_path,r'{}\vocab.txt'.format(path)))
+    
+    set_value('epochs',100)  #
+    f1 = model_train()
+    f1 = np.array(f1)
+    line = "roberta_wwm model with lr 9e-5,{:.6f},{:.6f},{:.6f}\n".format(f1.mean(),f1.min(),f1.max())
+    print(line) 
+    open("result_log.txt",'a').write(line)
+    
 # =============================================================================
+#     #尝试不同的学习率
 #     for lr in [3e-5,3e-6,9e-5,2e-4]:
 #         hyperparameter_tune_lr(lr)
-# =============================================================================
-    for lr in [9e-5,2e-4]: 
-        hyperparameter_tune_lr(lr)
-# =============================================================================
+# 
+#     #尝试不同的模型
 #     model_path = {'base_bert':'chinese_L-12_H-768_A-12'
 #      ,'roberta_wwm':'chinese_roberta_wwm_ext_L-12_H-768_A-12'
 #      ,'bert_wwm':'chinese_roberta_wwm_ext_L-12_H-768_A-12'
@@ -141,5 +152,4 @@ if __name__ == '__main__':   #if不改变变量的作用域
 #     for model_name in model_path:
 #         path = model_path[model_name]
 #         hyperparameter_tune(model_name,path) 
-# 
 # =============================================================================

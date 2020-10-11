@@ -1,0 +1,5 @@
+3e-05 learning rate ,0.777106,0.770922,0.779943
+3e-06 learning rate,0.74383, 0.74383, 0.74383
+9e-05 learning rate ,0.780634,0.778051,0.785744
+2e-04 learning rate ,--------,----------,--------
+roberta_wwm model with lr 9e-5,0.790531,0.783188,0.796849

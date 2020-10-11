@@ -1,6 +1,11 @@
+#安装pytorch的环境
 conda create -n pytorch python=3.6
-
-conda install pytorch==1.2.0 torchvision==0.4.0 cudatoolkit=10.0 -c pytorch
-
+pip install torch==1.6.0+cu101 torchvision==0.7.0+cu101 -f https://download.pytorch.org/whl/torch_stable.html
 pip install flair
 
+#安装keras的环境
+conda create -n keras python=3.6
+pip install --user --upgrade tensorflow-gpu
+pip install --user --upgrade tensorboard
+pip install keras==2.3.1
+pip install --user --upgrade tensorflow-gpu==1.14.0
